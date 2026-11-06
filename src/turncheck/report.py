@@ -30,8 +30,10 @@ def junit(results: list[ScenarioResult]) -> str:
     ]
     for r in results:
         name = escape(r.scenario.name, {'"': "&quot;"})
-        out.append(f'  <testcase name="{name}" classname="{escape(str(r.scenario.path))}" '
-                   f'time="{r.seconds:.3f}">')
+        out.append(
+            f'  <testcase name="{name}" classname="{escape(str(r.scenario.path))}" '
+            f'time="{r.seconds:.3f}">'
+        )
         if not r.ok:
             msg = escape(r.first_failure, {'"': "&quot;"})
             out.append(f'    <failure message="{msg}"/>')

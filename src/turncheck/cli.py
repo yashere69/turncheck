@@ -28,12 +28,19 @@ def main(argv: list[str] | None = None) -> int:
 
     run = sub.add_parser("run", help="run scenarios against an agent")
     run.add_argument("target", help="scenario file or directory")
-    run.add_argument("--agent", required=True, help='command that starts the agent, e.g. '
-                     '"python examples/agents/shopagent.py"')
+    run.add_argument(
+        "--agent",
+        required=True,
+        help='command that starts the agent, e.g. "python examples/agents/shopagent.py"',
+    )
     run.add_argument("--env", action="append", default=[], help="extra KEY=VALUE for the agent")
     run.add_argument("--junit", type=Path, help="write JUnit XML here")
-    run.add_argument("--settle-ms", type=int, default=150,
-                     help="how long the agent must be quiet before expectations are checked")
+    run.add_argument(
+        "--settle-ms",
+        type=int,
+        default=150,
+        help="how long the agent must be quiet before expectations are checked",
+    )
 
     lint = sub.add_parser("lint", help="validate scenario files without running them")
     lint.add_argument("target")

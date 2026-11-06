@@ -83,8 +83,8 @@ class GraphMock:
 
     @property
     def base_url(self) -> str:
-        host, port = self.server.server_address[:2]
-        return f"http://{host}:{port}"
+        port = self.server.server_address[1]
+        return f"http://127.0.0.1:{port}"
 
     def __enter__(self) -> GraphMock:
         self.thread.start()

@@ -117,7 +117,7 @@ class Session:
         deadline = time.time() + 10
         while time.time() < deadline:
             if self.proc.poll() is not None:
-                err = self.proc.stderr.read().decode()[-500:]
+                err = self.proc.stderr.read().decode()[-500:] if self.proc.stderr else ""
                 raise RuntimeError(f"agent exited during startup: {err}")
             try:
                 code, body = _http(
@@ -242,8 +242,10 @@ class Session:
             want = arg if isinstance(arg, int) else arg.get("status")
             if isinstance(want, int) and self.last_http != want:
                 return f"expected HTTP {want}, got {self.last_http}"
-            if isinstance(want, str) and want == "4xx" and not (
-                self.last_http and 400 <= self.last_http < 500
+            if (
+                isinstance(want, str)
+                and want == "4xx"
+                and not (self.last_http and 400 <= self.last_http < 500)
             ):
                 return f"expected a 4xx rejection, got HTTP {self.last_http}"
             return None

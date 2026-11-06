@@ -71,7 +71,9 @@ def send_buttons(to: str, body: str, buttons: list[tuple[str, str]]) -> None:
                 "type": "button",
                 "body": {"text": body},
                 "action": {
-                    "buttons": [{"type": "reply", "reply": {"id": i, "title": t}} for i, t in buttons]
+                    "buttons": [
+                        {"type": "reply", "reply": {"id": i, "title": t}} for i, t in buttons
+                    ]
                 },
             },
         }
