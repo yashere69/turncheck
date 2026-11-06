@@ -43,6 +43,7 @@ class ScenarioResult:
     steps: list[StepResult] = field(default_factory=list)
     error: str | None = None
     seconds: float = 0.0
+    transcript: list[dict] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -76,10 +77,19 @@ def _http(method: str, url: str, body: bytes | None = None, headers: dict | None
 class Session:
     """One scenario run: owns the agent process, the mock and the simulated clock."""
 
-    def __init__(self, scenario: Scenario, agent_cmd: str, extra_env: dict, settle_ms: int):
+    def __init__(
+        self,
+        scenario: Scenario,
+        agent_cmd: str,
+        extra_env: dict,
+        settle_ms: int,
+        webhook_path: str = "/webhook",
+    ):
         self.sc = scenario
         self.agent_cmd = agent_cmd
         self.extra_env = extra_env
+        self.webhook_path = "/" + webhook_path.lstrip("/")
+        self.transcript: list[dict] = []
         self.settle = settle_ms / 1000
         self.clock = SimClock()
         self.customer = envelope.Customer(**scenario.customer)
@@ -95,17 +105,27 @@ class Session:
     def start(self, mock: GraphMock) -> None:
         self.mock = mock
         self.port = _free_port()
+        values = {
+            "port": str(self.port),
+            "graph_api_base": mock.base_url,
+            "access_token": ACCESS_TOKEN,
+            "app_secret": APP_SECRET,
+            "verify_token": VERIFY_TOKEN,
+            "phone_number_id": envelope.PHONE_NUMBER_ID,
+            "trace_url": f"{mock.base_url}/__turncheck/trace",
+        }
+        # Agents name these settings differently; --env META_SECRET={app_secret} maps them.
+        custom = {**{k: str(v) for k, v in self.sc.env.items()}, **self.extra_env}
         env = {
             **os.environ,
-            "PORT": str(self.port),
-            "GRAPH_API_BASE": mock.base_url,
+            "PORT": values["port"],
+            "GRAPH_API_BASE": values["graph_api_base"],
             "WHATSAPP_TOKEN": ACCESS_TOKEN,
             "APP_SECRET": APP_SECRET,
             "VERIFY_TOKEN": VERIFY_TOKEN,
             "PHONE_NUMBER_ID": envelope.PHONE_NUMBER_ID,
-            "TURNCHECK_TRACE_URL": f"{mock.base_url}/__turncheck/trace",
-            **{k: str(v) for k, v in self.sc.env.items()},
-            **self.extra_env,
+            "TURNCHECK_TRACE_URL": values["trace_url"],
+            **{k: _fill(v, values) for k, v in custom.items()},
         }
         args = shlex.split(self.agent_cmd)
         if args and args[0] in {"python", "python3"}:
@@ -122,7 +142,7 @@ class Session:
             try:
                 code, body = _http(
                     "GET",
-                    f"{self.base}/webhook?hub.mode=subscribe&hub.verify_token={VERIFY_TOKEN}"
+                    f"{self.base}{self.webhook_path}?hub.mode=subscribe&hub.verify_token={VERIFY_TOKEN}"
                     "&hub.challenge=4242",
                 )
                 if code == 200 and body.strip() == "4242":
@@ -151,7 +171,7 @@ class Session:
         body = envelope.encode(payload)
         sig = signature if signature is not None else envelope.sign(body, APP_SECRET)
         headers = {"Content-Type": "application/json", "X-Hub-Signature-256": sig}
-        self.last_http, _ = _http("POST", f"{self.base}/webhook", body, headers)
+        self.last_http, _ = _http("POST", f"{self.base}{self.webhook_path}", body, headers)
         self._settle()
 
     def _settle(self) -> None:
@@ -171,6 +191,12 @@ class Session:
             self.pending_trace = self.mock.recorder.traces[self.cursor_trace :]
             self.cursor_out = len(self.mock.recorder.outbound)
             self.cursor_trace = len(self.mock.recorder.traces)
+        for m in self.pending_out:
+            self.transcript.append(
+                {"role": "agent", "text": describe_message(m["body"]), "at": self.clock.now}
+            )
+        for t in self.pending_trace:
+            self.transcript.append({"role": "tool", "text": json.dumps(t), "at": self.clock.now})
 
     def stim(self, kind: str, arg, ref: str | None) -> None:
         if kind == "advance":
@@ -187,6 +213,8 @@ class Session:
                 payload = envelope.text_message(self.customer, wamid, str(arg), ts)
             if ref:
                 self.sent_wamids[ref] = payload
+            said = arg.get("title", arg["id"]) if kind == "press" else str(arg)
+            self.transcript.append({"role": "customer", "text": said, "at": ts})
             sig = "sha256=" + "0" * 64 if kind == "send_tampered" else None
             self._post_webhook(payload, signature=sig)
             return
@@ -194,8 +222,7 @@ class Session:
             self._post_webhook(self.sent_wamids[arg])  # identical bytes, identical wamid
             return
         if kind == "status":
-            of = arg.get("of", "last_reply")
-            wamid = arg.get("wamid") or self._last_reply_wamid(of)
+            wamid = arg.get("wamid") or self._last_reply_wamid()
             ts = self.clock.step()
             self._post_webhook(envelope.status_update(self.customer, wamid, arg["state"], ts))
             return
@@ -211,7 +238,7 @@ class Session:
             return
         raise ValueError(kind)
 
-    def _last_reply_wamid(self, of: str) -> str:
+    def _last_reply_wamid(self) -> str:
         with self.mock.recorder.lock:
             n = len(self.mock.recorder.outbound)
         return f"wamid.OUT{n:06d}" if n else "wamid.OUT000000"
@@ -252,13 +279,35 @@ class Session:
         raise ValueError(kind)
 
 
+def _fill(value: str, values: dict[str, str]) -> str:
+    try:
+        return value.format_map(values)
+    except (KeyError, IndexError, ValueError) as e:
+        raise ValueError(f"--env value {value!r}: unknown placeholder {e}") from e
+
+
+def _unasserted(session: Session, line: int, before: str) -> StepResult | None:
+    """Replies nobody asserted on are a failure: a second, unexpected message is a bug."""
+    if session.sc.allow_extra_replies or not session.pending_out:
+        return None
+    extra = "; ".join(describe_message(m["body"]) for m in session.pending_out)
+    session.pending_out = []
+    return StepResult(
+        line, "unasserted", False, f"reply not covered by any expect {before}: {extra}"
+    )
+
+
 def run_scenario(
-    sc: Scenario, agent_cmd: str, extra_env: dict | None = None, settle_ms: int = 150
+    sc: Scenario,
+    agent_cmd: str,
+    extra_env: dict | None = None,
+    settle_ms: int = 150,
+    webhook_path: str = "/webhook",
 ) -> ScenarioResult:
     result = ScenarioResult(scenario=sc)
     t0 = time.time()
     with GraphMock(ACCESS_TOKEN) as mock:
-        session = Session(sc, agent_cmd, extra_env or {}, settle_ms)
+        session = Session(sc, agent_cmd, extra_env or {}, settle_ms, webhook_path)
         try:
             session.start(mock)
             for step in sc.steps:
@@ -266,11 +315,18 @@ def run_scenario(
                     err = session.expect(step.kind, step.arg)
                     result.steps.append(StepResult(step.line, step.kind, err is None, err or ""))
                 else:
+                    leftover = _unasserted(session, step.line, f"(before step {step.line})")
+                    if leftover:
+                        result.steps.append(leftover)
                     session.stim(step.kind, step.arg, step.ref)
                     result.steps.append(StepResult(step.line, step.kind, True))
+            leftover = _unasserted(session, len(sc.steps), "(at end of scenario)")
+            if leftover:
+                result.steps.append(leftover)
         except Exception as e:  # an agent crash is a test failure, not a turncheck crash
             result.error = f"{type(e).__name__}: {e}"
         finally:
             session.stop()
+            result.transcript = session.transcript
     result.seconds = time.time() - t0
     return result

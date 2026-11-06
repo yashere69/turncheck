@@ -1,6 +1,6 @@
 [project]
 name = "turncheck"
-version = "0.1.0"
+version = "0.2.0"
 description = "Regression tests for WhatsApp agents: replay Cloud API webhooks, assert on replies, tool calls, duplicates and the 24-hour window."
 readme = "README.md"
 license = { text = "MIT" }

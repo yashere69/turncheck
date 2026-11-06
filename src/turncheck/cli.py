@@ -33,8 +33,20 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help='command that starts the agent, e.g. "python examples/agents/shopagent.py"',
     )
-    run.add_argument("--env", action="append", default=[], help="extra KEY=VALUE for the agent")
+    run.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        help="extra KEY=VALUE for the agent; VALUE may use {graph_api_base}, {app_secret}, "
+        "{access_token}, {verify_token}, {phone_number_id}, {port}, {trace_url}",
+    )
+    run.add_argument(
+        "--webhook-path", default="/webhook", help="path the agent serves its webhook on"
+    )
     run.add_argument("--junit", type=Path, help="write JUnit XML here")
+    run.add_argument(
+        "--transcripts", type=Path, help="write each conversation as JSONL (chatlens traces)"
+    )
     run.add_argument(
         "--settle-ms",
         type=int,
@@ -62,10 +74,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     env = _parse_env(args.env)
-    results = [run_scenario(s, args.agent, env, args.settle_ms) for s in scenarios]
+    results = [
+        run_scenario(s, args.agent, env, args.settle_ms, args.webhook_path) for s in scenarios
+    ]
     print(report.console(results))
     if args.junit:
         args.junit.write_text(report.junit(results), encoding="utf-8")
+    if args.transcripts:
+        args.transcripts.write_text(report.transcripts(results), encoding="utf-8")
     return 0 if all(r.ok for r in results) else 1
 
 

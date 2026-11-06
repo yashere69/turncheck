@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from xml.sax.saxutils import escape
 
 from .runner import ScenarioResult
@@ -40,3 +42,24 @@ def junit(results: list[ScenarioResult]) -> str:
         out.append("  </testcase>")
     out.append("</testsuite>")
     return "\n".join(out) + "\n"
+
+
+def transcripts(results: list[ScenarioResult]) -> str:
+    """One JSON line per scenario, in the trace format chatlens reads."""
+    lines = []
+    for r in results:
+        turns = [
+            {
+                "role": t["role"],
+                "text": t["text"],
+                "at": datetime.fromtimestamp(t["at"], UTC).isoformat(),
+            }
+            for t in r.transcript
+        ]
+        meta = {"scenario": r.scenario.name, "passed": r.ok, "failure": r.first_failure}
+        lines.append(
+            json.dumps(
+                {"id": r.scenario.path.stem, "turns": turns, "meta": meta}, ensure_ascii=False
+            )
+        )
+    return "\n".join(lines) + "\n"

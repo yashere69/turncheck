@@ -34,6 +34,7 @@ steps:
     "steps, message",
     [
         ("  - expect_reply: {}\n", "first step must be a stimulus"),
+        ("", "is empty"),
         ("  - send: hi\n    expect_reply: {}\n", "exactly one action"),
         ("  - shout: hi\n", "unknown key"),
         ("  - redeliver: nope\n", "unknown message"),
@@ -43,4 +44,4 @@ steps:
 )
 def test_rejects_bad_scenarios(tmp_path, steps, message):
     with pytest.raises((ScenarioError, ValueError), match=message):
-        load(write(tmp_path, "steps:\n" + steps))
+        load(write(tmp_path, "steps:\n" + steps if steps else "steps: []\n"))

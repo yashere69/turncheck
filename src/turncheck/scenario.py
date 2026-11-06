@@ -37,6 +37,7 @@ class Scenario:
     customer: dict
     steps: list[Step] = field(default_factory=list)
     env: dict = field(default_factory=dict)
+    allow_extra_replies: bool = False
 
 
 def load(path: str | Path) -> Scenario:
@@ -70,7 +71,9 @@ def load(path: str | Path) -> Scenario:
         if ref:
             refs.add(ref)
         steps.append(Step(kind=kind, arg=arg, ref=ref, line=i))
-    if steps and steps[0].kind in EXPECTATIONS:
+    if not steps:
+        raise ScenarioError(f"{path}: 'steps' is empty")
+    if steps[0].kind in EXPECTATIONS:
         raise ScenarioError(f"{path}: the first step must be a stimulus")
     return Scenario(
         name=data.get("name", path.stem),
@@ -78,6 +81,7 @@ def load(path: str | Path) -> Scenario:
         customer=customer,
         steps=steps,
         env=data.get("env", {}),
+        allow_extra_replies=bool(data.get("allow_extra_replies", False)),
     )
 
 
