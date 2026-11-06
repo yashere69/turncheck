@@ -1,0 +1,19 @@
+name: turncheck
+description: Run turncheck scenarios against a WhatsApp agent
+inputs:
+  scenarios:
+    description: Scenario file or directory
+    required: true
+  agent:
+    description: Command that starts the agent (it receives PORT, GRAPH_API_BASE, etc.)
+    required: true
+  junit:
+    description: Where to write JUnit XML
+    default: turncheck-junit.xml
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: pip install "${{ github.action_path }}"
+    - shell: bash
+      run: turncheck run "${{ inputs.scenarios }}" --agent "${{ inputs.agent }}" --junit "${{ inputs.junit }}"
