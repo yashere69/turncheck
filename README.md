@@ -125,7 +125,7 @@ arrive late.
 ## In CI
 
 ```yaml
-- uses: yashere69/turncheck@v0.1.0
+- uses: yashere69/turncheck@v0.2.0
   with:
     scenarios: tests/whatsapp
     agent: node dist/server.js
