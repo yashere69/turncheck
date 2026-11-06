@@ -191,12 +191,13 @@ class Session:
             self.pending_trace = self.mock.recorder.traces[self.cursor_trace :]
             self.cursor_out = len(self.mock.recorder.outbound)
             self.cursor_trace = len(self.mock.recorder.traces)
+        # tool calls come before the reply they produced
+        for t in self.pending_trace:
+            self.transcript.append({"role": "tool", "text": json.dumps(t), "at": self.clock.now})
         for m in self.pending_out:
             self.transcript.append(
                 {"role": "agent", "text": describe_message(m["body"]), "at": self.clock.now}
             )
-        for t in self.pending_trace:
-            self.transcript.append({"role": "tool", "text": json.dumps(t), "at": self.clock.now})
 
     def stim(self, kind: str, arg, ref: str | None) -> None:
         if kind == "advance":
