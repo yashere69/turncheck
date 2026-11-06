@@ -1,0 +1,11 @@
+name: order status uses the right tool argument
+customer: {wa_id: "919800000002", name: Ravi}
+steps:
+  - send: "where is my order #KC1042?"
+  - expect_tool: {name: lookup_order, args: {order_id: KC1042}}
+  - expect_reply:
+      type: interactive
+      contains: ["KC1042", "shipped"]
+      buttons: ["Another order", "Talk to a person"]
+  - press: {id: human, title: "Talk to a person"}
+  - expect_reply: {contains: "person"}

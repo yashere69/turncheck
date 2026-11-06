@@ -1,0 +1,6 @@
+name: unsigned or forged webhooks are rejected and ignored
+customer: {wa_id: "919800000005", name: Zoya}
+steps:
+  - send_tampered: "hi"
+  - expect_http: 401
+  - expect_no_reply: {}

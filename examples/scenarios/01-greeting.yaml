@@ -1,0 +1,5 @@
+name: greets the customer by profile name
+customer: {wa_id: "919800000001", name: Asha}
+steps:
+  - send: "namaste"
+  - expect_reply: {type: text, contains: "Asha"}

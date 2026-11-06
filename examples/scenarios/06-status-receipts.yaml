@@ -1,0 +1,9 @@
+name: delivery receipts never trigger a reply
+customer: {wa_id: "919800000006", name: Dev}
+steps:
+  - send: "hello"
+  - expect_reply: {contains: "Namaste"}
+  - status: {state: delivered}
+  - expect_no_reply: {}
+  - status: {state: read}
+  - expect_no_reply: {}

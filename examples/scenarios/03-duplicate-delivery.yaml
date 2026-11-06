@@ -1,0 +1,8 @@
+name: a Meta retry of the same wamid gets no second reply
+customer: {wa_id: "919800000003", name: Meera}
+steps:
+  - send: "size chart please"
+    as: ask
+  - expect_reply: {contains: "sizes"}
+  - redeliver: ask
+  - expect_no_reply: {}

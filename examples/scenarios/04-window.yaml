@@ -1,0 +1,12 @@
+name: outside the 24-hour window, proactive updates use a template
+customer: {wa_id: "919800000004", name: Kabir}
+steps:
+  - send: "order KC1043 status"
+  - expect_tool: {name: lookup_order, args: {order_id: KC1043}}
+  - expect_reply: {contains: "packed"}
+  - advance: 2h
+  - event: {path: /events/order-shipped, json: {order_id: KC1043}}
+  - expect_reply: {type: text, contains: "shipped"}
+  - advance: 25h
+  - event: {path: /events/order-shipped, json: {order_id: KC1043}}
+  - expect_reply: {type: template, template: order_update}
