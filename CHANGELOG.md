@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Fail on replies no expectation covers (opt out with `allow_extra_replies: true`)
+- `--webhook-path` and `{placeholder}` values in `--env`, so existing agents run unmodified
+- `--transcripts` writes conversations in chatlens's trace format
+- `lint` rejects scenarios with no steps
+
 ## 0.1.0
 
 First release.

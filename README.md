@@ -45,6 +45,11 @@ in production are somewhere else:
 None of these show up in a prompt test. They do show up when you send the real envelope
 to the real endpoint, so that's what turncheck does.
 
+The closest earlier tool is Botium's [WhatsApp connector](https://github.com/codeforequity-at/botium-connector-whatsapp),
+which also emulated the API and captured outbound messages. It targets the older on-premise
+WhatsApp Business API, needs Redis and the Botium stack, has no signature, retry, receipt or
+window handling, and hasn't changed since 2020.
+
 ## Writing a scenario
 
 ```yaml
@@ -75,6 +80,13 @@ steps:
 
 `turncheck lint <dir>` validates scenario files without running anything.
 
+**Every reply has to be accounted for.** If the agent sends a message that no
+`expect_reply` consumes before the next customer step (or the end of the scenario), the
+scenario fails with "reply not covered by any expect". Double replies are one of the most
+common WhatsApp agent bugs, and they don't only come from webhook retries. If a scenario
+legitimately sends extra messages you don't care about, set `allow_extra_replies: true` at
+the top of the file.
+
 ## Connecting your own agent
 
 turncheck starts your agent as a subprocess and passes it these environment variables:
@@ -94,6 +106,18 @@ from turncheck import trace
 trace.tool_call("lookup_order", {"order_id": order_id})
 ```
 
+Your agent probably already has its own names for these settings and its own webhook
+path. You don't need to change it; map them on the command line:
+
+```bash
+turncheck run tests/whatsapp --agent "node dist/server.js" --webhook-path /api/whatsapp \
+  --env META_APP_SECRET={app_secret} --env WA_API_BASE={graph_api_base} \
+  --env WA_ACCESS_TOKEN={access_token}
+```
+
+Placeholders: `{graph_api_base}`, `{app_secret}`, `{access_token}`, `{verify_token}`,
+`{phone_number_id}`, `{port}`, `{trace_url}`. Use `{{`/`}}` for a literal brace.
+
 The agent should compute the 24-hour window from message `timestamp`s, not from
 `time.time()`. That's what makes `advance: 25h` work, and it's also correct when webhooks
 arrive late.
@@ -108,6 +132,14 @@ arrive late.
 ```
 
 The action writes JUnit XML to `turncheck-junit.xml` for your test reporter.
+
+## Reading what happened
+
+`--transcripts runs.jsonl` writes every scenario as a conversation (customer messages,
+agent replies, tool calls) in the trace format [chatlens](https://github.com/yashere69/chatlens)
+reads, with pass/fail and the first failure in `meta`. When a real LLM is behind the
+agent, `chatlens serve runs.jsonl` is the quickest way to read its replies and label what
+went wrong. chatlens can also turn failed conversations back into turncheck scenarios.
 
 ## Does it actually catch things?
 
