@@ -97,4 +97,17 @@ def test_transcripts_are_chatlens_traces(tmp_path):
     row = json.loads(transcripts([r]))
     assert row["id"] == "s" and row["meta"]["passed"] is True
     assert [t["role"] for t in row["turns"]] == ["customer", "agent"]
-    assert row["turns"][1]["text"] == "text: 'pong 0'"
+    assert row["turns"][1]["text"] == "pong 0"
+
+
+def test_transcript_text_reads_like_the_chat():
+    from turncheck.assertions import transcript_text
+
+    assert transcript_text({"type": "text", "text": {"body": "हाँ, COD है"}}) == "हाँ, COD है"
+    assert transcript_text({"type": "template", "template": {"name": "order_update"}}) == (
+        "[template order_update]"
+    )
+    buttons = {"buttons": [{"reply": {"id": "y", "title": "Yes"}}, {"reply": {"title": "No"}}]}
+    body = {"type": "interactive", "interactive": {"body": {"text": "Cancel?"}, "action": buttons}}
+    assert transcript_text(body) == "Cancel?\n[buttons: Yes | No]"
+    assert transcript_text({"type": "image"}) == "[image message]"

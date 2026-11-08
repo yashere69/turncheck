@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `--transcripts`: agent turns hold the message as the customer saw it (`pong`, or
+  `[template order_update]`, or the text with `[buttons: Yes | No]`), not the debug form
+  `text: 'pong'`. Opened in chatlens, the conversation now reads like the chat.
+- CI: the `compat` job fails if pywa can't be imported, instead of passing on skips.
+
 ## 0.3.0
 
 Closer to how Meta actually delivers and rejects messages.

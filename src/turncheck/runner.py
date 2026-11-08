@@ -20,7 +20,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from . import envelope
-from .assertions import check_reply, check_tool, describe_message
+from .assertions import check_reply, check_tool, describe_message, transcript_text
 from .clock import SimClock
 from .graph_mock import GraphMock, error_for
 from .scenario import Scenario
@@ -278,7 +278,7 @@ class Session:
             self.transcript.append({"role": "tool", "text": json.dumps(t), "at": self.clock.now})
         receipts = []
         for m in new_out:
-            said = describe_message(m["body"])
+            said = transcript_text(m["body"])
             if m["rejected"]:
                 self.rejected.append(m)
                 err = m["rejected"]

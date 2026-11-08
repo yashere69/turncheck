@@ -18,6 +18,24 @@ def describe_message(body: dict) -> str:
     return f"{t}: {body}"
 
 
+def transcript_text(body: dict) -> str:
+    """What a person reading the conversation would see: the message itself, with
+    non-text parts in brackets."""
+    t = body.get("type")
+    if t == "text":
+        return str(body.get("text", {}).get("body", ""))
+    if t == "template":
+        return f"[template {body.get('template', {}).get('name', '?')}]"
+    if t == "interactive":
+        inter = body.get("interactive", {})
+        titles = [
+            b.get("reply", {}).get("title", "") for b in inter.get("action", {}).get("buttons", [])
+        ]
+        text = str(inter.get("body", {}).get("text", ""))
+        return f"{text}\n[buttons: {' | '.join(titles)}]" if titles else text
+    return f"[{t} message]"
+
+
 def message_text(body: dict) -> str:
     t = body.get("type")
     if t == "text":
