@@ -35,3 +35,5 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev,compat]"
       - run: pytest -q tests/test_compat_pywa.py
+        env:
+          TURNCHECK_COMPAT_REQUIRED: "1"

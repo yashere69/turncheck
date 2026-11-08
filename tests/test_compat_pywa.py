@@ -2,16 +2,21 @@
 
 pywa parses the webhooks itself (signature check, duplicate skipping, BSUIDs), so these
 tests fail if turncheck's payloads drift from what real consumers accept. Skipped unless
-pywa, fastapi and uvicorn are installed (CI installs them in the `compat` job).
+pywa, fastapi and uvicorn are installed. The `compat` CI job installs them and sets
+TURNCHECK_COMPAT_REQUIRED=1, so an import failure there fails the job instead of skipping.
 """
 
+import importlib
+import os
 from pathlib import Path
 
 import pytest
 
-pytest.importorskip("pywa")
-pytest.importorskip("fastapi")
-pytest.importorskip("uvicorn")
+for _mod in ("pywa", "fastapi", "uvicorn"):
+    if os.environ.get("TURNCHECK_COMPAT_REQUIRED") == "1":
+        importlib.import_module(_mod)
+    else:
+        pytest.importorskip(_mod)
 
 from turncheck.runner import run_scenario  # noqa: E402
 from turncheck.scenario import load  # noqa: E402
