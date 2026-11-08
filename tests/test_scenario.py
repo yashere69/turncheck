@@ -71,3 +71,12 @@ def test_lint_rejects_a_folder_without_scenarios(tmp_path, capsys):
 
     assert main(["lint", str(tmp_path)]) == 2
     assert "no scenario files" in capsys.readouterr().err
+
+
+def test_invalid_yaml_is_one_line_with_the_line_number(tmp_path):
+    p = tmp_path / "s.yaml"
+    p.write_text("name: s\nsteps:\n  - send: [hi\n", encoding="utf-8")
+    with pytest.raises(ScenarioError) as e:
+        load(p)
+    assert "not valid YAML at line" in str(e.value)
+    assert "\n" not in str(e.value)

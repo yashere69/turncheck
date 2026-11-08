@@ -105,7 +105,10 @@ def load(path: str | Path) -> Scenario:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
-        raise ScenarioError(f"{path}: not valid YAML ({e})") from e
+        mark = getattr(e, "problem_mark", None)
+        at = f" at line {mark.line + 1}" if mark else ""
+        why = getattr(e, "problem", None)
+        raise ScenarioError(f"{path}: not valid YAML{at}" + (f": {why}" if why else "")) from e
     if not isinstance(data, dict) or "steps" not in data:
         raise ScenarioError(f"{path}: needs a top-level 'steps' list")
     customer = data.get("customer") or {"wa_id": "919800000001", "name": "Test Customer"}
