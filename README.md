@@ -57,8 +57,10 @@ None of these show up in a prompt test. They do show up when you send the real e
 to the real endpoint, so that's what turncheck does.
 
 Other tools emulate the API too. [chatwright](https://pkg.go.dev/chatwright.dev/runtime/whatsapp)
-runs an in-process fake Graph server for Go tests (text-first, no window or signature
-handling at v0.10). [whatsapp-dev](https://github.com/mjarkk/whatsapp-dev) is a local mock
+is the closest: it drives a bot in any language over HTTP from Go tests, and its broader
+framework covers Telegram and model-driven test users. Its WhatsApp emulator is text-first
+and, as of v0.10 (checked against its main branch in November 2026), doesn't sign webhooks,
+model the 24-hour window, redeliver, or send status receipts. [whatsapp-dev](https://github.com/mjarkk/whatsapp-dev) is a local mock
 with a web UI for manual testing. Botium's [WhatsApp connector](https://github.com/codeforequity-at/botium-connector-whatsapp)
 targets the old on-premise API and hasn't changed since 2020. turncheck is the one to use
 when the agent is a separate process in any language and you want CI to check Meta's
