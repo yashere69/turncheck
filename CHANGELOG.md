@@ -9,6 +9,9 @@
   `text: 'pong'`. Opened in chatlens, the conversation now reads like the chat.
 - An `--agent` command that doesn't exist fails with "can't start the agent: 'x' not found"
   rather than a bare `FileNotFoundError`.
+- `run` and `lint` take several files or folders (`turncheck lint scenarios/*.yaml` works),
+  and `lint` reports every broken file in one pass instead of stopping at the first. A
+  path that doesn't exist says so rather than "no scenarios found".
 - CI: the `compat` job fails if pywa can't be imported, instead of passing on skips.
 
 ## 0.3.0

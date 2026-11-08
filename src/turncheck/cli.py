@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="run scenarios against an agent")
-    run.add_argument("target", help="scenario file or directory")
+    run.add_argument("targets", nargs="+", metavar="target", help="scenario files or directories")
     run.add_argument(
         "--agent",
         required=True,
@@ -72,17 +72,31 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     lint = sub.add_parser("lint", help="validate scenario files without running them")
-    lint.add_argument("target")
+    lint.add_argument("targets", nargs="+", metavar="target", help="scenario files or directories")
 
     args = ap.parse_args(argv)
-    try:
-        paths = discover(args.target)
-        scenarios = [load(p) for p in paths]
-    except ScenarioError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-    if not scenarios:
-        print(f"no scenarios found in {args.target}", file=sys.stderr)
+    # Load everything before running anything, and report every broken file at once, so a
+    # folder with three mistakes takes one edit-and-lint cycle rather than three.
+    paths: list[Path] = []
+    errors: list[str] = []
+    for t in args.targets:
+        try:
+            found = discover(t)
+        except ScenarioError as e:
+            errors.append(str(e))
+            continue
+        if not found:
+            errors.append(f"{t}: no scenario files (*.yaml, *.yml)")
+        paths += [p for p in found if p not in paths]
+    scenarios = []
+    for p in paths:
+        try:
+            scenarios.append(load(p))
+        except ScenarioError as e:
+            errors.append(str(e))
+    if errors:
+        for msg in errors:
+            print(f"error: {msg}", file=sys.stderr)
         return 2
 
     if args.cmd == "lint":

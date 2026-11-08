@@ -180,4 +180,6 @@ def discover(target: str | Path) -> list[Path]:
     target = Path(target)
     if target.is_file():
         return [target]
+    if not target.exists():
+        raise ScenarioError(f"{target}: no such file or directory")
     return sorted(p for p in target.rglob("*.y*ml") if p.suffix in {".yml", ".yaml"})

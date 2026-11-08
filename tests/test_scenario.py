@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from turncheck.scenario import ScenarioError, load
@@ -45,3 +47,27 @@ steps:
 def test_rejects_bad_scenarios(tmp_path, steps, message):
     with pytest.raises((ScenarioError, ValueError), match=message):
         load(write(tmp_path, "steps:\n" + steps if steps else "steps: []\n"))
+
+
+def test_lint_takes_several_targets_and_reports_every_error(tmp_path, capsys):
+    from turncheck.cli import main
+
+    examples = Path(__file__).resolve().parent.parent / "examples" / "scenarios"
+    good = sorted(examples.glob("*.yaml"))[:2]
+    assert main(["lint", *map(str, good)]) == 0
+    assert capsys.readouterr().out.count("  ok  ") == 2
+
+    (tmp_path / "a.yaml").write_text("name: a\nsteps: []\n", encoding="utf-8")
+    (tmp_path / "b.yaml").write_text("name: b\nsteps: [{teleport: 1}]\n", encoding="utf-8")
+    missing = tmp_path / "nope"
+    assert main(["lint", str(tmp_path), str(missing), str(good[0])]) == 2
+    err = capsys.readouterr().err
+    assert "a.yaml" in err and "b.yaml" in err
+    assert "nope: no such file or directory" in err
+
+
+def test_lint_rejects_a_folder_without_scenarios(tmp_path, capsys):
+    from turncheck.cli import main
+
+    assert main(["lint", str(tmp_path)]) == 2
+    assert "no scenario files" in capsys.readouterr().err

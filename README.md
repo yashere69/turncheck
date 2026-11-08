@@ -96,7 +96,8 @@ steps:
 | `expect_tool: {name, args}` | next traced tool call |
 | `expect_http: 401` | status of the last webhook POST: a code, `4xx`, or `{status: 200, within_ms: 500}` to also check how fast it was acknowledged |
 
-`turncheck lint <dir>` validates scenario files without running anything.
+`turncheck lint scenarios/` validates scenario files without running anything. Both `lint`
+and `run` take any mix of files and folders, and `lint` lists every broken file at once.
 
 Expectations wait for the agent. An `expect_reply` passes as soon as the reply arrives and
 fails only after `--reply-timeout-ms` (default 5000), so an agent that acknowledges first and
