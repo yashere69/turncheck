@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0
+
+Closer to how Meta actually delivers and rejects messages.
+
+- Webhooks carry business-scoped user IDs (`user_id`, `from_user_id`, `recipient_user_id`),
+  and `customer.share_phone: false` models a username customer whose number Meta withholds.
+  Replies may be addressed with `recipient` (BSUID) as well as `to`.
+- Free-form sends outside the 24-hour window are rejected with `131047`, as a `failed`
+  receipt by default or on the send (`window_errors: response`).
+- `graph_error` step: fail the agent's next send(s) with a Cloud API error code.
+- `send_batch` step: several notifications in one POST.
+- Unacknowledged webhooks (no 2xx within `webhook_timeout_ms`) are redelivered;
+  `expect_http` takes `within_ms`.
+- Expectations wait up to `--reply-timeout-ms` for the reply. Before this, an agent that
+  took longer than `--settle-ms` to answer failed with "agent sent nothing".
+- Failure output includes the tail of the agent's stderr. The agent's stderr goes to a
+  temporary file; the old unread pipe could fill and block a chatty agent.
+- Fixed: `expect_http: 4xx` (documented in 0.2) crashed the runner.
+- Fixed: Windows paths in `--agent` lost their backslashes.
+- `python -m turncheck` works.
+- Reference agent: four more seeded bugs (`noretry`, `batch`, `slowack`, `phoneonly`).
+- CI: a `compat` job runs scenarios against a pywa 4.5.0 bot; tests also run on Windows
+  and macOS.
+
+Behaviour changes: the window check and webhook redelivery are on by default. A scenario
+that relied on free-form messages outside the window, or on a slow agent not being
+retried, now fails; set `window_errors: off` or raise `webhook_timeout_ms`.
+
 ## 0.2.0
 
 - Fail on replies no expectation covers (opt out with `allow_extra_replies: true`)

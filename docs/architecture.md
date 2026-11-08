@@ -21,13 +21,19 @@ For each scenario file:
    `4242` back. An agent that fails this would never get past Meta's dashboard either.
 4. **Play the steps.** Stimulus steps build an envelope (`envelope.py`), serialise it
    once, sign those exact bytes with the app secret, and POST it to `/webhook`.
-5. **Wait for quiet.** Good agents return 200 immediately and do the work on another
+5. **Behave like Meta on the way in.** If the POST isn't answered with a 2xx within
+   `webhook_timeout_ms`, the identical bytes are sent again (`webhook_retries` times), as
+   Meta's at-least-once delivery would.
+6. **Wait for quiet.** Good agents return 200 immediately and do the work on another
    thread, so turncheck cannot read the reply off the HTTP response. It polls the
-   recorder until nothing new has arrived for `--settle-ms` (default 150 ms), then hands
-   the batch of outbound messages and trace events to the following expectation steps.
-6. **Check expectations** against that batch. `expect_reply` takes one message off the
-   front; `expect_no_reply` requires the batch to be empty.
-7. **Stop the agent.** A fresh process per scenario means one test's in-memory state
+   recorder until nothing new has arrived for `--settle-ms` (default 150 ms). Sends the
+   mock rejected are kept apart from delivered ones; a send rejected "via webhook" (the
+   window check, or `graph_error` with `via: webhook`) triggers a `failed` receipt to the
+   agent, and turncheck waits for quiet again in case the agent falls back to a template.
+7. **Check expectations** against what was delivered. `expect_reply` takes one message
+   off the front, and if there is none yet it keeps polling for up to
+   `--reply-timeout-ms`; `expect_no_reply` requires nothing to have been delivered.
+8. **Stop the agent.** A fresh process per scenario means one test's in-memory state
    (dedup sets, session history) can't leak into the next.
 
 ## Why each piece exists
@@ -56,8 +62,14 @@ the stand-in when `TURNCHECK_TRACE_URL` is set and does nothing otherwise. That 
 production path clean and makes the contract explicit.
 
 **Quiescence, not fixed sleeps.** A fixed sleep is either slow or flaky. Waiting for
-"nothing new for N ms" adapts to the agent's speed. It can still be fooled by an agent that
-pauses longer than N ms mid-reply, which is why `--settle-ms` exists.
+"nothing new for N ms" adapts to the agent's speed. On its own it was fooled by any agent
+that thinks for longer than N ms before replying (0.2 failed every such agent with "sent
+nothing"), so positive expectations now poll for the message itself and only negative ones
+rely on quiet.
+
+**The mock decides at send time.** The window check runs inside the Graph stand-in, against
+the simulated clock and the customer's last inbound message, so an agent sees exactly what
+Meta would return. The error codes and wording come from Meta's error-code reference.
 
 ## Determinism and LLMs
 
