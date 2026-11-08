@@ -1,0 +1,6 @@
+name: a pywa bot answers both messages of a batched webhook
+customer: {wa_id: "919800000012", name: Ravi}
+steps:
+  - send_batch: ["first question", "second question"]
+  - expect_reply: {contains: "first question"}
+  - expect_reply: {contains: "second question"}

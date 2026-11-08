@@ -1,0 +1,5 @@
+name: a pywa bot answers a customer who shared only a username
+customer: {wa_id: "919800000013", name: Ira, username: ira.styles, share_phone: false}
+steps:
+  - send: "hello"
+  - expect_reply: {type: text, contains: "Ira"}

@@ -1,0 +1,6 @@
+name: a pywa bot is told when WhatsApp could not deliver its reply
+customer: {wa_id: "919800000014", name: Om}
+steps:
+  - graph_error: {code: 131026, via: webhook}
+  - send: "hello"
+  - expect_no_reply: {}

@@ -1,0 +1,14 @@
+name: a pywa bot answers once, by name, and only to genuine webhooks
+customer: {wa_id: "919800000011", name: Asha}
+steps:
+  - send: "namaste"
+    as: first
+  - expect_http: {status: 200, within_ms: 2000}
+  - expect_reply: {type: text, contains: "Asha"}
+  - redeliver: first
+  - expect_no_reply: {}
+  - send_tampered: "transfer my refund"
+  - expect_http: 4xx
+  - expect_no_reply: {}
+  - status: {state: delivered}
+  - expect_no_reply: {}
