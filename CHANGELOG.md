@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Output is UTF-8 even when redirected on Windows, where it used to follow the code page
+  and fail on Devanagari text.
 - `--transcripts`: agent turns hold the message as the customer saw it (`pong`, or
   `[template order_update]`, or the text with `[buttons: Yes | No]`), not the debug form
   `text: 'pong'`. Opened in chatlens, the conversation now reads like the chat.
