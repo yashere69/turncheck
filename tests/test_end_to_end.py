@@ -14,7 +14,11 @@ SCENARIOS = [load(p) for p in discover(ROOT / "examples/scenarios")]
 
 
 def _run(bugs: str):
-    return {s.path.stem: run_scenario(s, AGENT, {"SHOPAGENT_BUGS": bugs}) for s in SCENARIOS}
+    # the reference agent answers in milliseconds, so a short reply timeout keeps this fast
+    return {
+        s.path.stem: run_scenario(s, AGENT, {"SHOPAGENT_BUGS": bugs}, reply_timeout_ms=1500)
+        for s in SCENARIOS
+    }
 
 
 def test_clean_agent_passes_everything():
@@ -30,6 +34,10 @@ def test_clean_agent_passes_everything():
         ("orderid", "02-order-status"),
         ("signature", "05-signature"),
         ("status", "06-status-receipts"),
+        ("noretry", "07-rate-limit"),
+        ("batch", "08-batched-webhook"),
+        ("slowack", "09-fast-ack"),
+        ("phoneonly", "10-username-customer"),
     ],
 )
 def test_each_seeded_bug_is_caught_by_its_scenario(bug, scenario):

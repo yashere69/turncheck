@@ -2,6 +2,10 @@
 
 The agent under test is pointed at this server via GRAPH_API_BASE. It also exposes
 /__turncheck/trace so instrumented agents can report tool calls.
+
+It can also fail the way the real API fails: a scenario can arm the next few sends to be
+rejected with a Cloud API error code, and the runner installs a policy that rejects
+free-form messages sent outside the 24-hour window.
 """
 
 from __future__ import annotations
@@ -9,23 +13,93 @@ from __future__ import annotations
 import json
 import re
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _MESSAGES_PATH = re.compile(r"^/v\d+\.\d+/(?P<pnid>\d+)/messages$")
+
+# Codes from Meta's Cloud API error-code reference. The details are paraphrased from it.
+# The reference does not list HTTP statuses, so scenarios can set `http:` themselves.
+KNOWN_ERRORS: dict[int, tuple[str, str]] = {
+    1: ("API Unknown", "Invalid request or possible server error."),
+    2: ("API Service", "Temporary problem caused by downtime or overload."),
+    4: ("API Too Many Calls", "The app has reached its API call rate limit."),
+    80007: ("Rate limit issues", "The WhatsApp Business Account has reached its rate limit."),
+    130429: ("Rate limit hit", "Cloud API message throughput has been reached."),
+    131000: ("Something went wrong", "Message failed to send because of an unknown error."),
+    131026: ("Message undeliverable", "Unable to deliver the message to this recipient."),
+    131047: (
+        "Re-engagement message",
+        "More than 24 hours have passed since the recipient last replied to the sender number.",
+    ),
+    131048: ("Spam rate limit hit", "Sending is restricted because of the number's quality."),
+    131049: ("Meta chose not to deliver", "Not delivered to maintain healthy engagement."),
+    131056: (
+        "Pair rate limit hit",
+        "Too many messages from this sender to the same recipient in a short period.",
+    ),
+    133010: ("Phone number not registered", "The phone number is not registered."),
+}
+
+
+def error_for(code: int, message: str | None = None) -> dict:
+    title, details = KNOWN_ERRORS.get(code, ("Error", message or f"error {code}"))
+    return {"code": code, "title": message or title, "details": details}
+
+
+def error_body(err: dict) -> dict:
+    """The JSON body the Graph API returns for a failed call."""
+    return {
+        "error": {
+            "message": f"(#{err['code']}) {err['title']}",
+            "type": "OAuthException",
+            "code": err["code"],
+            "error_data": {"messaging_product": "whatsapp", "details": err["details"]},
+            "fbtrace_id": "turncheck",
+        }
+    }
+
+
+# A policy looks at an outbound body and returns (error, via) to reject it, or None.
+Policy = Callable[[dict], "tuple[dict, str] | None"]
 
 
 class Recorder:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.outbound: list[dict] = []  # each: {"body": {...}, "auth": bool, "seq": int}
+        # each: {"body": {...}, "auth": bool, "seq": int, "wamid": str|None,
+        #        "rejected": error dict or None, "via": "response"|"webhook"|None}
+        self.outbound: list[dict] = []
         self.traces: list[dict] = []
+        self.armed: list[dict] = []  # failures queued by `graph_error` steps
+        self.policy: Policy | None = None
         self._seq = 0
 
-    def add_outbound(self, body: dict, auth_ok: bool) -> str:
+    def add_outbound(self, body: dict, auth_ok: bool) -> dict:
         with self.lock:
             self._seq += 1
-            self.outbound.append({"body": body, "auth": auth_ok, "seq": self._seq})
-            return f"wamid.OUT{self._seq:06d}"
+            rec: dict = {"body": body, "auth": auth_ok, "seq": self._seq}
+            rejection = None
+            if self.armed:
+                spec = self.armed[0]
+                spec["times"] -= 1
+                if spec["times"] <= 0:
+                    self.armed.pop(0)
+                rejection = (spec["error"], spec["via"], spec["http"])
+            elif self.policy:
+                hit = self.policy(body)
+                if hit:
+                    rejection = (hit[0], hit[1], 400)
+            if rejection is None or rejection[1] == "webhook":
+                rec["wamid"] = f"wamid.OUT{self._seq:06d}"  # accepted, maybe failed later
+            else:
+                rec["wamid"] = None
+            if rejection:
+                rec["rejected"], rec["via"], rec["http"] = rejection
+            else:
+                rec["rejected"], rec["via"], rec["http"] = None, None, 200
+            self.outbound.append(rec)
+            return rec
 
     def add_trace(self, event: dict) -> None:
         with self.lock:
@@ -61,18 +135,27 @@ def _handler(recorder: Recorder, token: str):
                 return self._json(200, {"ok": True})
             if _MESSAGES_PATH.match(self.path):
                 auth_ok = self.headers.get("Authorization") == f"Bearer {token}"
-                wamid = recorder.add_outbound(body, auth_ok)
+                rec = recorder.add_outbound(body, auth_ok)
+                if rec["rejected"] and rec["via"] == "response":
+                    return self._json(rec["http"], error_body(rec["rejected"]))
                 return self._json(
                     200,
                     {
                         "messaging_product": "whatsapp",
-                        "contacts": [{"input": body.get("to"), "wa_id": body.get("to")}],
-                        "messages": [{"id": wamid}],
+                        "contacts": [_contact_ack(body)],
+                        "messages": [{"id": rec["wamid"]}],
                     },
                 )
             return self._json(404, {"error": {"message": f"unknown path {self.path}"}})
 
     return Handler
+
+
+def _contact_ack(body: dict) -> dict:
+    """The `contacts` element of a send response: echoes how the recipient was addressed."""
+    if body.get("to"):
+        return {"input": body["to"], "wa_id": body["to"]}
+    return {"input": body.get("recipient"), "user_id": body.get("recipient")}
 
 
 class GraphMock:
@@ -85,6 +168,10 @@ class GraphMock:
     def base_url(self) -> str:
         port = self.server.server_address[1]
         return f"http://127.0.0.1:{port}"
+
+    def arm(self, error: dict, times: int = 1, via: str = "response", http: int = 400) -> None:
+        with self.recorder.lock:
+            self.recorder.armed.append({"error": error, "times": times, "via": via, "http": http})
 
     def __enter__(self) -> GraphMock:
         self.thread.start()

@@ -16,6 +16,10 @@ def console(results: list[ScenarioResult]) -> str:
         lines.append(f"  {mark}  {r.scenario.name}  ({r.seconds:.2f}s)")
         if not r.ok:
             lines.append(f"        -> {r.first_failure}")
+            log = [x for x in r.agent_log.strip().splitlines() if x.strip()][-8:]
+            if log:
+                lines.append("        agent stderr (last lines):")
+                lines.extend(f"          | {x}" for x in log)
     passed = sum(r.ok for r in results)
     lines.append("")
     lines.append(f"{passed}/{len(results)} scenarios passed")
@@ -38,7 +42,10 @@ def junit(results: list[ScenarioResult]) -> str:
         )
         if not r.ok:
             msg = escape(r.first_failure, {'"': "&quot;"})
-            out.append(f'    <failure message="{msg}"/>')
+            if r.agent_log.strip():
+                out.append(f'    <failure message="{msg}">{escape(r.agent_log.strip())}</failure>')
+            else:
+                out.append(f'    <failure message="{msg}"/>')
         out.append("  </testcase>")
     out.append("</testsuite>")
     return "\n".join(out) + "\n"

@@ -1,0 +1,7 @@
+name: the webhook is acknowledged before the work is done
+customer: {wa_id: "919800000009", name: Sana}
+webhook_timeout_ms: 1000
+steps:
+  - send: "hi"
+  - expect_http: {status: 200, within_ms: 500}
+  - expect_reply: {}

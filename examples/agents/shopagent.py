@@ -9,6 +9,11 @@ comma-separated list to switch on seeded defects that real agents ship with:
   orderid    order-id regex misses "#KC1042" -> wrong tool argument
   signature  skips X-Hub-Signature-256 verification
   status     treats delivery-status webhooks as customer messages
+  slowack    does the work before acknowledging the webhook, like an inline LLM call
+  batch      reads only entry[0], dropping the rest of a batched webhook
+  noretry    gives up when the Graph API answers with a rate-limit or server error
+  phoneonly  assumes every sender has a phone number (`from`), which customers with a
+             WhatsApp username and no shared number do not
 
 Stdlib only, so the example runs anywhere turncheck does.
 """
@@ -22,6 +27,8 @@ import os
 import re
 import sys
 import threading
+import time
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -48,24 +55,42 @@ last_inbound: dict[str, int] = {}  # wa_id -> unix ts of the customer's latest m
 lock = threading.Lock()
 
 
-def send(payload: dict) -> None:
+RETRYABLE = {1, 2, 4, 80007, 130429, 131000}  # transient, per Meta's error-code reference
+sent_text: dict[str, tuple[str, str]] = {}  # wamid -> (to, body), to fall back on a template
+
+
+def send(payload: dict) -> str | None:
     payload = {"messaging_product": "whatsapp", **payload}
-    req = urllib.request.Request(
-        f"{GRAPH}/v21.0/{PNID}/messages",
-        data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
-    )
-    urllib.request.urlopen(req, timeout=5).read()
+    for attempt in range(3):
+        req = urllib.request.Request(
+            f"{GRAPH}/v21.0/{PNID}/messages",
+            data=json.dumps(payload).encode(),
+            headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return json.load(r)["messages"][0]["id"]
+        except urllib.error.HTTPError as e:
+            code = json.loads(e.read() or b"{}").get("error", {}).get("code")
+            if "noretry" in BUGS or code not in RETRYABLE or attempt == 2:
+                return None
+            time.sleep(0.1 * 2**attempt)  # back off before trying again
+    return None
+
+
+def addr(to: str) -> dict:
+    """Phone numbers go in `to`; a business-scoped user ID (e.g. IN.123...) in `recipient`."""
+    return {"recipient": to} if "." in to else {"to": to}
 
 
 def send_text(to: str, body: str) -> None:
-    send({"to": to, "type": "text", "text": {"body": body}})
+    send({**addr(to), "type": "text", "text": {"body": body}})
 
 
 def send_buttons(to: str, body: str, buttons: list[tuple[str, str]]) -> None:
     send(
         {
-            "to": to,
+            **addr(to),
             "type": "interactive",
             "interactive": {
                 "type": "button",
@@ -83,7 +108,7 @@ def send_buttons(to: str, body: str, buttons: list[tuple[str, str]]) -> None:
 def send_template(to: str, name: str, params: list[str]) -> None:
     send(
         {
-            "to": to,
+            **addr(to),
             "type": "template",
             "template": {
                 "name": name,
@@ -134,10 +159,15 @@ def route(to: str, name: str, text: str) -> None:
 
 
 def handle_payload(payload: dict) -> None:
-    for entry in payload.get("entry", []):
+    entries = payload.get("entry", [])
+    for entry in entries[:1] if "batch" in BUGS else entries:
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            names = {c["wa_id"]: c["profile"]["name"] for c in value.get("contacts", [])}
+            names = {}
+            for c in value.get("contacts", []):
+                for key in ("wa_id", "user_id"):
+                    if c.get(key):
+                        names[c[key]] = c["profile"]["name"]
             if value.get("statuses") and "status" in BUGS:
                 for st in value["statuses"]:
                     send_text(st["recipient_id"], "Sorry, I didn't understand that.")
@@ -147,8 +177,11 @@ def handle_payload(payload: dict) -> None:
                         if msg["id"] in seen_wamids:
                             continue  # Meta retried; we already handled this one
                         seen_wamids.add(msg["id"])
-                    last_inbound[msg["from"]] = int(msg["timestamp"])
-                frm = msg["from"]
+                    if "phoneonly" in BUGS:
+                        frm = msg["from"]
+                    else:
+                        frm = msg.get("from") or msg["from_user_id"]
+                    last_inbound[frm] = int(msg["timestamp"])
                 if msg["type"] == "text":
                     route(frm, names.get(frm, "there"), msg["text"]["body"])
                 elif msg["type"] == "interactive":
@@ -160,7 +193,11 @@ def handle_payload(payload: dict) -> None:
 
 
 def order_shipped(body: dict) -> None:
-    to, order_id, now = body["wa_id"], body["order_id"], int(body["timestamp"])
+    to, order_id, now = (
+        body.get("wa_id") or body["user_id"],
+        body["order_id"],
+        int(body["timestamp"]),
+    )
     inside = now - last_inbound.get(to, 0) < WINDOW_SECONDS
     if inside or "window" in BUGS:
         send_text(to, f"Good news: order {order_id} has shipped.")
@@ -194,6 +231,10 @@ class Handler(BaseHTTPRequestHandler):
                 got = self.headers.get("X-Hub-Signature-256", "")
                 if not hmac.compare_digest(expected, got):
                     return self._reply(401)
+            if "slowack" in BUGS:
+                time.sleep(1.5)  # stands in for an LLM call made before answering Meta
+                handle_payload(json.loads(raw))
+                return self._reply(200)
             self._reply(200)  # acknowledge first: slow acks are what make Meta retry
             threading.Thread(target=handle_payload, args=(json.loads(raw),)).start()
             return

@@ -1,0 +1,6 @@
+name: a customer with a username and no shared number still gets answered
+customer: {wa_id: "919800000010", name: Ira, username: ira.styles, share_phone: false}
+steps:
+  - send: "where is my order KC1042?"
+  - expect_tool: {name: lookup_order, args: {order_id: KC1042}}
+  - expect_reply: {contains: "shipped"}

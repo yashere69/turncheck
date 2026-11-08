@@ -18,7 +18,17 @@ from turncheck.runner import run_scenario  # noqa: E402
 from turncheck.scenario import discover, load  # noqa: E402
 
 AGENT = f"python {ROOT / 'examples/agents/shopagent.py'}"
-BUGS = ["dedup", "window", "orderid", "signature", "status"]
+BUGS = [
+    "dedup",
+    "window",
+    "orderid",
+    "signature",
+    "status",
+    "slowack",
+    "batch",
+    "noretry",
+    "phoneonly",
+]
 
 
 def run(bugs: str):

@@ -1,0 +1,7 @@
+name: a rate-limited send is retried, not dropped
+customer: {wa_id: "919800000007", name: Meera}
+steps:
+  - graph_error: {code: 130429, times: 1}
+  - send: "where is my order KC1042?"
+  - expect_tool: {name: lookup_order, args: {order_id: KC1042}}
+  - expect_reply: {contains: "shipped"}

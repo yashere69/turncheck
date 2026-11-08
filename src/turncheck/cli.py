@@ -48,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
         "--transcripts", type=Path, help="write each conversation as JSONL (chatlens traces)"
     )
     run.add_argument(
+        "--reply-timeout-ms",
+        type=int,
+        default=5000,
+        help="how long an expect_reply or expect_tool waits for a slow agent (default 5000)",
+    )
+    run.add_argument(
         "--settle-ms",
         type=int,
         default=150,
@@ -75,7 +81,8 @@ def main(argv: list[str] | None = None) -> int:
 
     env = _parse_env(args.env)
     results = [
-        run_scenario(s, args.agent, env, args.settle_ms, args.webhook_path) for s in scenarios
+        run_scenario(s, args.agent, env, args.settle_ms, args.webhook_path, args.reply_timeout_ms)
+        for s in scenarios
     ]
     print(report.console(results))
     if args.junit:

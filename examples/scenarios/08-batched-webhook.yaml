@@ -1,0 +1,8 @@
+name: every message in a batched webhook gets an answer
+customer: {wa_id: "919800000008", name: Dev}
+steps:
+  - send_batch: ["order KC1042 kahan hai?", "aur order KC1043?"]
+  - expect_tool: {name: lookup_order, args: {order_id: KC1042}}
+  - expect_reply: {contains: "KC1042"}
+  - expect_tool: {name: lookup_order, args: {order_id: KC1043}}
+  - expect_reply: {contains: "KC1043"}

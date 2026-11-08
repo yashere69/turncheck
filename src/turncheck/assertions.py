@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from .envelope import Customer
+
 
 def describe_message(body: dict) -> str:
     t = body.get("type")
@@ -25,10 +27,17 @@ def message_text(body: dict) -> str:
     return ""
 
 
-def check_reply(spec: dict | None, body: dict, customer_wa_id: str) -> str | None:
+def check_reply(spec: dict | None, body: dict, customer: Customer | str) -> str | None:
+    if isinstance(customer, str):  # 0.2 callers passed the wa_id
+        customer = Customer(wa_id=customer)
     spec = spec or {}
-    if body.get("to") != customer_wa_id:
-        return f"reply addressed to {body.get('to')!r}, expected {customer_wa_id!r}"
+    if not customer.addressed_by(body):
+        got = body.get("to") or body.get("recipient")
+        if customer.share_phone:
+            want = f"{customer.wa_id!r} (or BSUID {customer.user_id!r} as recipient)"
+        else:
+            want = f"BSUID {customer.user_id!r} as recipient: this customer shared no phone number"
+        return f"reply addressed to {got!r}, expected {want}"
     want_type = spec.get("type")
     if want_type and body.get("type") != want_type:
         return f"expected a {want_type} message, got {describe_message(body)}"

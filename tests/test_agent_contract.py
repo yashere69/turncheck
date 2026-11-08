@@ -53,13 +53,13 @@ ENV = {
 
 def scenario(tmp_path, body):
     p = tmp_path / "s.yaml"
-    p.write_text(body)
+    p.write_text(body, encoding="utf-8")
     return load(p)
 
 
 def agent(tmp_path):
     a = tmp_path / "agent.py"
-    a.write_text(AGENT)
+    a.write_text(AGENT, encoding="utf-8")
     return f"python {a}"
 
 
