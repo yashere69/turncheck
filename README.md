@@ -183,7 +183,7 @@ changes them is noticed:
 ## In CI
 
 ```yaml
-- uses: yashere69/turncheck@v0.3.0
+- uses: yashere69/turncheck@v0.3.1
   with:
     scenarios: tests/whatsapp
     agent: node dist/server.js

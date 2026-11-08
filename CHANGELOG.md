@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 - Output is UTF-8 even when redirected on Windows, where it used to follow the code page
   and fail on Devanagari text.
@@ -12,6 +12,7 @@
 - `run` and `lint` take several files or folders (`turncheck lint scenarios/*.yaml` works),
   and `lint` reports every broken file in one pass instead of stopping at the first. A
   path that doesn't exist says so rather than "no scenarios found".
+- Invalid YAML is reported on one line with its line number, not PyYAML's context dump.
 - CI: the `compat` job fails if pywa can't be imported, instead of passing on skips.
 
 ## 0.3.0
