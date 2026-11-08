@@ -111,3 +111,10 @@ def test_transcript_text_reads_like_the_chat():
     body = {"type": "interactive", "interactive": {"body": {"text": "Cancel?"}, "action": buttons}}
     assert transcript_text(body) == "Cancel?\n[buttons: Yes | No]"
     assert transcript_text({"type": "image"}) == "[image message]"
+
+
+def test_missing_agent_binary_is_named(tmp_path):
+    sc = scenario(tmp_path, "steps:\n  - send: ping\n  - expect_reply: {contains: pong}\n")
+    r = run_scenario(sc, "no-such-agent-binary --port 1", ENV)
+    assert not r.ok
+    assert "can't start the agent: 'no-such-agent-binary' not found" in r.first_failure

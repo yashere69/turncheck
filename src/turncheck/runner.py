@@ -165,7 +165,11 @@ class Session:
         self.log = tempfile.TemporaryFile()
         if args and args[0] in {"python", "python3"}:
             args[0] = sys.executable
-        self.proc = subprocess.Popen(args, env=env, stdout=subprocess.DEVNULL, stderr=self.log)
+        try:
+            self.proc = subprocess.Popen(args, env=env, stdout=subprocess.DEVNULL, stderr=self.log)
+        except (FileNotFoundError, PermissionError) as e:
+            what = "not found" if isinstance(e, FileNotFoundError) else "not executable"
+            raise RuntimeError(f"can't start the agent: {args[0]!r} {what} (check --agent)") from e
         self.base = f"http://127.0.0.1:{self.port}"
         deadline = time.time() + 10
         while time.time() < deadline:
