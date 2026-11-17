@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2
+
+- The Graph API mock no longer looks up the hostname of 127.0.0.1 before listening.
+  `http.server` does that in `server_bind()`, and on GitHub's macOS runners the lookup took
+  about 35 seconds, so scenarios timed out there. The example agent skips it too, and the
+  README says how to do the same in your own `http.server` agent.
+- Startup retries a verification GET that times out instead of failing on the first one,
+  and an agent that accepts connections but never answers gets an error that says so
+  rather than `HTTP None`.
+
 ## 0.3.1
 
 - Output is UTF-8 even when redirected on Windows, where it used to follow the code page
