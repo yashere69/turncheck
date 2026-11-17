@@ -74,6 +74,7 @@ def test_slow_ack_fails_the_budget_and_is_redelivered():
 LATE = textwrap.dedent("""
     import json, os, threading, time, urllib.request
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from socketserver import TCPServer
     from urllib.parse import parse_qs, urlparse
 
     def reply(to):
@@ -94,7 +95,12 @@ LATE = textwrap.dedent("""
             for m in json.loads(raw)["entry"][0]["changes"][0]["value"].get("messages", []):
                 threading.Thread(target=reply, args=(m["from"],)).start()
 
-    ThreadingHTTPServer(("127.0.0.1", int(os.environ["PORT"])), H).serve_forever()
+    class Server(ThreadingHTTPServer):
+        def server_bind(self):  # no reverse-DNS lookup; see LocalServer in graph_mock.py
+            TCPServer.server_bind(self)
+            self.server_name, self.server_port = self.server_address[:2]
+
+    Server(("127.0.0.1", int(os.environ["PORT"])), H).serve_forever()
 """)
 
 

@@ -15,6 +15,7 @@ import re
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 
 _MESSAGES_PATH = re.compile(r"^/v\d+\.\d+/(?P<pnid>\d+)/messages$")
 
@@ -158,10 +159,24 @@ def _contact_ack(body: dict) -> dict:
     return {"input": body.get("recipient"), "user_id": body.get("recipient")}
 
 
+class LocalServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without the reverse-DNS lookup in server_bind().
+
+    http.server resolves the bind address with socket.getfqdn() before it starts
+    listening. On GitHub's macOS runners that call takes about 35 seconds for 127.0.0.1,
+    and nothing here uses the name it returns.
+    """
+
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name, self.server_port = str(host), int(port)
+
+
 class GraphMock:
     def __init__(self, token: str):
         self.recorder = Recorder()
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(self.recorder, token))
+        self.server = LocalServer(("127.0.0.1", 0), _handler(self.recorder, token))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     @property

@@ -31,6 +31,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -245,5 +246,13 @@ class Handler(BaseHTTPRequestHandler):
         return self._reply(404)
 
 
+class Server(ThreadingHTTPServer):
+    # http.server looks up the bind address's hostname before it listens; on some macOS
+    # machines (GitHub's runners among them) that takes over 30 seconds. Skip it.
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()
+    Server(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()

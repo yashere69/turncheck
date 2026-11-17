@@ -1,3 +1,3 @@
 """turncheck: transport-faithful regression tests for WhatsApp agents."""
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"

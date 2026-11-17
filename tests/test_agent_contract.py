@@ -13,6 +13,7 @@ from turncheck.scenario import load
 AGENT = textwrap.dedent("""
     import hashlib, hmac, json, os, threading, urllib.request
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from socketserver import TCPServer
     from urllib.parse import parse_qs, urlparse
     API, SECRET = os.environ["WA_API_URL"], os.environ["META_SECRET"].encode()
     TOKEN, REPLIES = os.environ["WA_TOKEN"], int(os.environ.get("REPLIES", "1"))
@@ -41,7 +42,12 @@ AGENT = textwrap.dedent("""
                 for i in range(REPLIES):
                     threading.Thread(target=send, args=(m["from"], f"pong {i}")).start()
 
-    ThreadingHTTPServer(("127.0.0.1", int(os.environ["PORT"])), H).serve_forever()
+    class Server(ThreadingHTTPServer):
+        def server_bind(self):  # no reverse-DNS lookup; see LocalServer in graph_mock.py
+            TCPServer.server_bind(self)
+            self.server_name, self.server_port = self.server_address[:2]
+
+    Server(("127.0.0.1", int(os.environ["PORT"])), H).serve_forever()
 """)
 
 ENV = {
@@ -118,3 +124,39 @@ def test_missing_agent_binary_is_named(tmp_path):
     r = run_scenario(sc, "no-such-agent-binary --port 1", ENV)
     assert not r.ok
     assert "can't start the agent: 'no-such-agent-binary' not found" in r.first_failure
+
+
+SILENT = textwrap.dedent("""
+    import os, socket, time
+    s = socket.socket()
+    s.bind(("127.0.0.1", int(os.environ["PORT"])))
+    s.listen()
+    conns = []
+    while True:
+        conns.append(s.accept()[0])  # accept, never answer
+""")
+
+
+def test_an_agent_that_accepts_but_never_answers_gets_a_clear_error(tmp_path):
+    a = tmp_path / "silent.py"
+    a.write_text(SILENT, encoding="utf-8")
+    sc = scenario(tmp_path, 'name: s\nsteps:\n  - send: "hi"\n')
+    r = run_scenario(sc, f"python {a}")
+    assert not r.ok
+    assert "accepted connections but didn't answer" in r.first_failure
+
+
+def test_local_servers_skip_the_reverse_dns_lookup(monkeypatch):
+    """http.server calls socket.getfqdn() before listening; that took ~35 s on a macOS
+    runner, so every scenario timed out there. The Graph mock must not call it."""
+    import socket
+
+    from turncheck.graph_mock import GraphMock
+
+    def boom(*a):
+        raise AssertionError("getfqdn called")
+
+    monkeypatch.setattr(socket, "getfqdn", boom)
+    mock = GraphMock("token")
+    assert mock.base_url.startswith("http://127.0.0.1:")
+    mock.server.server_close()

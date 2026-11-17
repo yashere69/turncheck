@@ -164,6 +164,13 @@ To reply to a customer who has no `wa_id`, send to their BSUID in the `recipient
 instead of `to`, as Meta's docs describe. turncheck accepts either for customers who do
 share a number.
 
+If turncheck reports that the agent "accepted connections but didn't answer the
+verification GET", and the agent is built on Python's `http.server`: `HTTPServer` looks
+up the bind address's hostname before it starts listening, and on some macOS machines
+(GitHub's macOS runners included) that lookup takes over 30 seconds. Override
+`server_bind` to skip it, as [examples/agents/shopagent.py](examples/agents/shopagent.py)
+does.
+
 ### Agents built on a framework
 
 Frameworks that hard-code `graph.facebook.com` can still be pointed at turncheck from a

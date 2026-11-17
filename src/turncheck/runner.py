@@ -172,6 +172,7 @@ class Session:
             raise RuntimeError(f"can't start the agent: {args[0]!r} {what} (check --agent)") from e
         self.base = f"http://127.0.0.1:{self.port}"
         deadline = time.time() + 10
+        silent = False  # the agent accepted a connection but didn't answer
         while time.time() < deadline:
             if self.proc.poll() is not None:
                 err = self.log_tail(500)
@@ -181,14 +182,23 @@ class Session:
                     "GET",
                     f"{self.base}{self.webhook_path}?hub.mode=subscribe&hub.verify_token={VERIFY_TOKEN}"
                     "&hub.challenge=4242",
+                    timeout=max(0.5, min(5.0, deadline - time.time())),
                 )
-                if code == 200 and body.strip() == "4242":
-                    return
-                raise RuntimeError(f"verification handshake failed: HTTP {code} {body[:80]!r}")
-            except urllib.error.URLError:
+            except (urllib.error.URLError, ConnectionError):
                 time.sleep(0.05)
-            except ConnectionError:
-                time.sleep(0.05)
+                continue
+            if code is None:
+                silent = True
+                continue
+            if code == 200 and body.strip() == "4242":
+                return
+            raise RuntimeError(f"verification handshake failed: HTTP {code} {body[:80]!r}")
+        if silent:
+            raise RuntimeError(
+                "agent accepted connections but didn't answer the verification GET within 10s"
+                " (a server built on Python's http.server can spend that long in a reverse-DNS"
+                " lookup before it listens; see the README's troubleshooting section)"
+            )
         raise RuntimeError("agent did not start listening within 10s")
 
     def log_tail(self, limit: int = 2000) -> str:
