@@ -1,0 +1,43 @@
+name: release
+# A push to main that sets a version in pyproject.toml with no GitHub release yet publishes
+# one: tag vX.Y.Z on the commit that set the version, notes from that version's CHANGELOG
+# section. Releasing is bump version, write the changelog entry, push.
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml, .github/workflows/release.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish the release if this version has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          tag="v$version"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag is already released"
+            exit 0
+          fi
+          awk -v v="$version" '
+            $0 == "## " v { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md has no '## $version' section" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            gh release create "$tag" --title "$version" --notes-file notes.md --verify-tag
+          else
+            commit=$(git log -1 --format=%H -S"version = \"$version\"" -- pyproject.toml)
+            gh release create "$tag" --title "$version" --notes-file notes.md --target "$commit"
+          fi
